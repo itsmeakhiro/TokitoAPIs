@@ -1,25 +1,23 @@
 const { spawn } = require("child_process");
 const express = require("express");
+const app = express();
 const path = require("path");
 const net = require("net");
 const cors = require("cors");
 
-const app = express();
-const isVercel = !!process.env.VERCEL;
 const generateRandomPort = () =>
   Math.floor(Math.random() * (65535 - 1024) + 1024);
 let activePort = generateRandomPort();
 
 app.use(cors());
-app.use(express.static(path.join(__dirname, "views")));
 
 async function isPortInUse(port) {
   return new Promise((resolve) => {
     const tester = net
       .createServer()
-      .once("error", () => resolve(true))
+      .once("error", () => resolve(false))
       .once("listening", () => {
-        tester.once("close", () => resolve(false)).close();
+        tester.once("close", () => resolve(true)).close();
       })
       .listen(port, "127.0.0.1");
   });
@@ -27,9 +25,10 @@ async function isPortInUse(port) {
 
 async function initializeServer(port) {
   try {
-    const isAvailable = !(await isPortInUse(port));
+    const isAvailable = await isPortInUse(port);
     if (!isAvailable) {
       const newPort = generateRandomPort();
+      console.log(`Port ${port} is in use. Switching to port ${newPort}`);
       activePort = newPort;
       return initializeServer(newPort);
     }
@@ -43,8 +42,6 @@ async function initializeServer(port) {
 }
 
 function launchProcess(instanceIndex) {
-  if (isVercel) return;
-
   const childProcess = spawn(
     "node",
     ["--trace-warnings", "--async-stack-traces", "main.js"],
@@ -60,6 +57,9 @@ function launchProcess(instanceIndex) {
 
   childProcess.on("close", (exitCode) => {
     if (exitCode !== 0) {
+      console.log(
+        `API server process exited with code ${exitCode}. Restarting...`
+      );
       launchProcess(instanceIndex);
     }
   });
@@ -70,12 +70,9 @@ function launchProcess(instanceIndex) {
 }
 
 async function startApp() {
+  console.log("Initializing the application...");
   await initializeServer(activePort);
-  if (!isVercel) {
-    launchProcess(1);
-  }
+  launchProcess(1);
 }
 
 startApp();
-
-module.exports = app;

@@ -5,5 +5,8 @@ const app = express();
 app.use(express.json());
 app.use("", ai);
 
-app.listen(8080)
-module.exports = app;
+async function main(){
+  app.listen(8080)
+}
+
+main()
